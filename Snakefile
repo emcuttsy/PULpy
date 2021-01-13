@@ -5,14 +5,14 @@ IDS, = glob_wildcards("genomes/{id}_genomic.fna.gz")
 
 configfile: "config.json"
 
-ruleorder: ncbi2table > gff2table > proteins
+ruleorder: ncbi2table > imggff2table > gff2table > proteins
 
 rule all:
         input: expand('puls/{sample}.puls.sum.tsv', sample=IDS), expand('puls/{sample}.puls.tsv', sample=IDS), expand('dbcan/{sample}.out.dm.ps.filtered', sample=IDS), expand('pfam/{sample}.pfam', sample=IDS)
 
 rule proteins:
 	input: 'genomes/{id}_genomic.fna.gz'
-	output: 
+	output:
 		faa='proteins/{id}_protein.faa',
 		gff='proteins/{id}_prodigal.gff'
 	conda: "envs/PULpy.yaml"
@@ -58,6 +58,46 @@ rule gff2table:
 		gff.close();
 		out.close();
 
+rule imggff2table:
+	input: "proteins/{id}_protein.faa", "proteins/{id}.gff"
+	output: 'feature_table/{id}_ft.txt'
+	run:
+
+		# if output dir doesn't exist
+		# create it
+		try:
+    			os.stat("feature_table")
+		except:
+    			os.mkdir("feature_table")
+
+		# open the input file
+		gff = open(input[1], mode="r")
+
+		# open the output file
+		out = open(output[0], mode="w")
+
+		# iterate over file
+		for row in gff:
+
+			if row.startswith("#"):
+				continue
+
+			arr = row.split('\t')
+			if (len(arr) < 9):
+				continue
+
+			if (arr[2] != "CDS"):
+				continue
+
+			lstr = arr[8]
+			lste = lstr.split(";")
+			seqid = lste[0].split('=')[1]
+			locus_tag = lste[1].split('=')[1]
+
+			out.write("%s\t%s\t%s\t%s\t%s\t%s\n" % (arr[0],arr[3],arr[4],arr[6],seqid,seqid))
+
+		gff.close();
+		out.close();
 
 rule ncbi2table:
 	input: "ncbi_feature_table/{id}_feature_table.txt", "proteins/{id}_protein.faa"
@@ -125,7 +165,7 @@ rule dbcan_filter:
 	shell: "{params.script} {input} > {output.ps} && cat {output.ps} | awk '$10 >= 0.35' | awk '$5 <= 1e-18' > {output.filt}"
 
 rule puls:
-	input: 
+	input:
 		pfam='pfam/{id}.pfam',
 		dbcan='dbcan/{id}.out.dm.ps.filtered',
 		ft='feature_table/{id}_ft.txt'
@@ -135,9 +175,8 @@ rule puls:
 		all='puls/{id}.puls.tsv',
 		sum='puls/{id}.puls.sum.tsv'
 	conda: "envs/PULpy.yaml"
-	shell: 
+	shell:
 		'''
 		mkdir -p puls
 		./scripts/predict_puls.R {input.ft} {input.pfam} {input.dbcan} {output.all} {output.sum} {params.id}
 		'''
-

@@ -1,0 +1,10 @@
+dbcan_data/
+dbcan/
+feature_table/
+genomes/
+ncbi_feature_table/
+pfam/
+pfam_data/
+proteins/
+puls/
+.snakemake/
